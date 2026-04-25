@@ -1,5 +1,6 @@
 locals {
-  name = var.name
+  name        = var.name
+  common_tags = var.tags
 }
 
 # ----------------------
@@ -10,9 +11,9 @@ resource "aws_vpc" "this" {
   enable_dns_hostnames = true
   enable_dns_support   = true
 
-  tags = {
+  tags = merge(local.common_tags, {
     Name = local.name
-  }
+  })
 }
 # ----------------------
 # Internet Gateway
@@ -20,9 +21,9 @@ resource "aws_vpc" "this" {
 resource "aws_internet_gateway" "this" {
   vpc_id = aws_vpc.this.id
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-igw"
-  }
+  })
 }
 # ----------------------
 # Public Subnets
@@ -35,13 +36,13 @@ resource "aws_subnet" "public" {
   availability_zone       = var.azs[count.index]
   map_public_ip_on_launch = true
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-public-${count.index}"
 
     # EKS tags
-    "kubernetes.io/role/elb"                         = "1"
-    "kubernetes.io/cluster/${var.cluster_name}"      = "owned"
-  }
+    "kubernetes.io/role/elb"                    = "1"
+    "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+  })
 }
 # ----------------------
 # Private Subnets
@@ -53,13 +54,13 @@ resource "aws_subnet" "private" {
   cidr_block        = var.private_subnets[count.index]
   availability_zone = var.azs[count.index]
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-private-${count.index}"
 
     # EKS tags
-    "kubernetes.io/role/internal-elb"                = "1"
-    "kubernetes.io/cluster/${var.cluster_name}"      = "owned"
-  }
+    "kubernetes.io/role/internal-elb"           = "1"
+    "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+  })
 }
 # ----------------------
 # Elastic IPs (per AZ)
@@ -78,9 +79,9 @@ resource "aws_nat_gateway" "this" {
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-nat-${count.index}"
-  }
+  })
 
   depends_on = [aws_internet_gateway.this]
 }
@@ -90,9 +91,9 @@ resource "aws_nat_gateway" "this" {
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.this.id
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-public-rt"
-  }
+  })
 }
 
 resource "aws_route" "public_internet" {
@@ -114,9 +115,9 @@ resource "aws_route_table" "private" {
   count  = length(var.azs)
   vpc_id = aws_vpc.this.id
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-private-rt-${count.index}"
-  }
+  })
 }
 
 resource "aws_route" "private_nat" {
@@ -139,9 +140,9 @@ resource "aws_vpc_endpoint" "s3" {
   vpc_endpoint_type = "Gateway"
   route_table_ids   = aws_route_table.private[*].id
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-s3-endpoint"
-  }
+  })
 }
 resource "aws_vpc_endpoint" "dynamodb" {
   vpc_id            = aws_vpc.this.id
@@ -149,9 +150,9 @@ resource "aws_vpc_endpoint" "dynamodb" {
   vpc_endpoint_type = "Gateway"
   route_table_ids   = aws_route_table.private[*].id
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-dynamodb-endpoint"
-  }
+  })
 }
 
 # ----------------------
@@ -177,9 +178,9 @@ resource "aws_security_group" "vpce" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-vpce-sg"
-  }
+  })
 }
 
 # --------------------
@@ -193,9 +194,9 @@ resource "aws_vpc_endpoint" "ecr_api" {
   security_group_ids  = [aws_security_group.vpce.id]
   private_dns_enabled = true
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-ecr-api-endpoint"
-  }
+  })
 }
 
 # --------------------
@@ -209,7 +210,7 @@ resource "aws_vpc_endpoint" "ecr_dkr" {
   security_group_ids  = [aws_security_group.vpce.id]
   private_dns_enabled = true
 
-  tags = {
+  tags = merge(local.common_tags,{
     Name = "${local.name}-ecr-dkr-endpoint"
-  }
+  })
 }
