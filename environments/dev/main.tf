@@ -10,3 +10,8 @@ module "vpc" {
   private_subnets = var.private_subnets
   tags            = var.tags
 }
+module "iam" {
+  source = "../../modules/iam"
+
+  cluster_name = var.cluster_name
+}
