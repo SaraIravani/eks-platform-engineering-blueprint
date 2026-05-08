@@ -15,3 +15,15 @@ module "iam" {
 
   cluster_name = var.cluster_name
 }
+module "eks" {
+  source = "../../modules/eks"
+
+  cluster_name     = var.cluster_name
+  cluster_version  = var.cluster_version
+  cluster_role_arn = module.iam.eks_cluster_role_arn
+
+  subnet_ids = module.vpc.private_subnets
+
+  endpoint_private_access = true
+  endpoint_public_access  = false
+}
