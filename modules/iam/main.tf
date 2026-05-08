@@ -50,3 +50,45 @@ resource "aws_iam_role_policy_attachment" "cni_policy" {
   role       = aws_iam_role.eks_node_group.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 }
+
+# -------------------------
+data "aws_iam_policy_document" "ebs_csi_assume_role" {
+  count = var.oidc_provider_arn != null && var.oidc_provider_url != null ? 1 : 0
+
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Federated"
+      identifiers = [var.oidc_provider_arn]
+    }
+
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "${var.oidc_provider_url}:sub"
+      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${var.oidc_provider_url}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ebs_csi" {
+  count = var.oidc_provider_arn != null && var.oidc_provider_url != null ? 1 : 0
+
+  name               = "${var.cluster_name}-ebs-csi-role"
+  assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume_role[0].json
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi" {
+  count = var.oidc_provider_arn != null && var.oidc_provider_url != null ? 1 : 0
+
+  role       = aws_iam_role.ebs_csi[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
