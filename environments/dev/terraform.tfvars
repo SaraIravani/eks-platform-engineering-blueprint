@@ -24,4 +24,4 @@ tags = {
   Project     = "eks-platform"
   Owner       = "platform-team"
 }
-
+cluster_version = "1.30"
