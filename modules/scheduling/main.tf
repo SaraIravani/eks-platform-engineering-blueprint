@@ -120,3 +120,19 @@ resource "kubernetes_deployment" "batch_test" {
 
   depends_on = [kubernetes_priority_class.batch_low]
 }
+resource "kubernetes_pod_disruption_budget_v1" "api_test" {
+  metadata {
+    name      = "api-test-pdb"
+    namespace = kubernetes_namespace.this["api"].metadata[0].name
+  }
+
+  spec {
+    min_available = 2
+
+    selector {
+      match_labels = {
+        app = "api-test"
+      }
+    }
+  }
+}
