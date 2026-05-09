@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: batch-scale-test
+  namespace: batch
+spec:
+  replicas: 30
+  selector:
+    matchLabels:
+      app: batch-scale-test
+  template:
+    metadata:
+      labels:
+        app: batch-scale-test
+        workload: batch
+    spec:
+      nodeSelector:
+        workload: batch
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: batch
+          effect: NoSchedule
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "256Mi"
