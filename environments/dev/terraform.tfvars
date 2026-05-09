@@ -25,3 +25,26 @@ tags = {
   Owner       = "platform-team"
 }
 cluster_version = "1.30"
+node_groups = {
+  system = {
+    instance_types = ["t3.medium"]
+    capacity_type  = "ON_DEMAND"
+    min_size       = 2
+    max_size       = 4
+    desired_size   = 2
+    disk_size      = 30
+
+    labels = {
+      workload = "system"
+      lifecycle = "on-demand"
+    }
+
+    taints = [
+      {
+        key    = "workload"
+        value  = "system"
+        effect = "NO_SCHEDULE"
+      }
+    ]
+  }
+}
