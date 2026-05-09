@@ -1,0 +1,30 @@
+name: terraform-validate
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [dev, staging, production]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: terraform-linters/setup-tflint@v4
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+      - name: Terraform init
+        working-directory: environments/${{ matrix.env }}
+        run: terraform init -backend=false
+      - name: Terraform validate
+        working-directory: environments/${{ matrix.env }}
+        run: terraform validate
+      - name: TFLint
+        run: tflint --recursive
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          soft_fail: false

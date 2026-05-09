@@ -1,12 +1,8 @@
-#terraform {
-#  backend "s3" {
-#    bucket = "eks-platform-sara-20260327"
-#    key    = "dev/terraform.tfstate"
-#    region = "ca-central-1"
-#  }
-#}
+# Production recommendation:
+# Configure remote state per environment (dev/staging/prod) with S3 + DynamoDB lock table,
+# versioning, SSE-KMS, and public access block on the backend bucket.
+# Example backend config file usage:
+# terraform init -backend-config=environments/dev/backend.hcl
 terraform {
-  backend "local" {
-    path = "terraform.tfstate"
-  }
+  backend "s3" {}
 }

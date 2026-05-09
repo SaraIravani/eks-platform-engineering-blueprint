@@ -16,11 +16,14 @@ resource "aws_eks_node_group" "this" {
     desired_size = each.value.desired_size
   }
 
+  update_config {
+    max_unavailable_percentage = 33
+  }
+
   labels = each.value.labels
 
   dynamic "taint" {
     for_each = each.value.taints
-
     content {
       key    = taint.value.key
       value  = taint.value.value
@@ -28,9 +31,9 @@ resource "aws_eks_node_group" "this" {
     }
   }
 
-  tags = {
-    Name                                            = "${var.cluster_name}-${each.key}"
-    "k8s.io/cluster-autoscaler/enabled"            = "true"
+  tags = merge(var.tags, {
+    Name                                             = "${var.cluster_name}-${each.key}"
+    "k8s.io/cluster-autoscaler/enabled"             = "true"
     "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
-  }
+  })
 }
