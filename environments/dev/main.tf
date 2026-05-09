@@ -36,3 +36,16 @@ module "addons" {
 
   depends_on = [module.eks]
 }
+module "node_groups" {
+  source = "../../modules/node_groups"
+
+  cluster_name  = module.eks.cluster_name
+  node_role_arn = module.iam.eks_node_group_role_arn
+  subnet_ids    = module.vpc.private_subnets
+  node_groups   = var.node_groups
+
+  depends_on = [
+    module.eks,
+    module.addons
+  ]
+}
