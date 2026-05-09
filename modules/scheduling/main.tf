@@ -72,3 +72,51 @@ resource "kubernetes_deployment" "api_test" {
 
   depends_on = [kubernetes_priority_class.api_high]
 }
+resource "kubernetes_deployment" "batch_test" {
+  metadata {
+    name      = "batch-test"
+    namespace = kubernetes_namespace.this["batch"].metadata[0].name
+  }
+
+  spec {
+    replicas = 1
+
+    selector {
+      match_labels = {
+        app = "batch-test"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app      = "batch-test"
+          workload = "batch"
+        }
+      }
+
+      spec {
+        priority_class_name = "batch-low-priority"
+
+        node_selector = {
+          workload = "batch"
+        }
+
+        toleration {
+          key      = "workload"
+          operator = "Equal"
+          value    = "batch"
+          effect   = "NoSchedule"
+        }
+
+        container {
+          name    = "busybox"
+          image   = "busybox:latest"
+          command = ["sh", "-c", "sleep 3600"]
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_priority_class.batch_low]
+}
