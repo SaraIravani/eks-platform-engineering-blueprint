@@ -128,4 +128,26 @@ node_groups = {
       }
     ]
   }
+  security = {
+    instance_types = ["m6i.large"]
+    capacity_type  = "ON_DEMAND"
+    min_size       = 1
+    max_size       = 3
+    desired_size   = 1
+    disk_size      = 50
+
+    labels = {
+      workload = "security"
+      lifecycle = "on-demand"
+      isolation = "strict"
+    }
+
+    taints = [
+      {
+        key    = "workload"
+        value  = "security"
+        effect = "NO_SCHEDULE"
+      }
+    ]
+  }
 }
