@@ -106,4 +106,26 @@ node_groups = {
       }
     ]
   }
+  data = {
+    instance_types = ["r6i.large", "r5.large"]
+    capacity_type  = "ON_DEMAND"
+    min_size       = 1
+    max_size       = 4
+    desired_size   = 1
+    disk_size      = 100
+
+    labels = {
+      workload = "data"
+      lifecycle = "on-demand"
+      storage = "ebs"
+    }
+
+    taints = [
+      {
+        key    = "workload"
+        value  = "data"
+        effect = "NO_SCHEDULE"
+      }
+    ]
+  }
 }
