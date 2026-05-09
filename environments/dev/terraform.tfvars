@@ -47,4 +47,20 @@ node_groups = {
       }
     ]
   }
+  api = {
+    instance_types = ["m6i.large", "m5.large"]
+    capacity_type  = "ON_DEMAND"
+    min_size       = 3
+    max_size       = 10
+    desired_size   = 3
+    disk_size      = 50
+
+    labels = {
+      workload = "api"
+      lifecycle = "on-demand"
+      criticality = "high"
+    }
+
+    taints = []
+  }
 }
