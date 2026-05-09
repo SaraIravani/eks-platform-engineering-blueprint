@@ -27,3 +27,12 @@ module "eks" {
   endpoint_private_access = true
   endpoint_public_access  = false
 }
+module "addons" {
+  source = "../../modules/addons"
+
+  cluster_name            = module.eks.cluster_name
+  cluster_oidc_issuer_url = module.eks.cluster_oidc_issuer_url
+  ebs_csi_role_arn        = module.iam.ebs_csi_role_arn
+
+  depends_on = [module.eks]
+}
