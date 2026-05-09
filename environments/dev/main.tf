@@ -56,3 +56,14 @@ module "scheduling" {
 
   depends_on = [module.node_groups]
 }
+module "storage" {
+  source = "../../modules/storage"
+
+  cluster_name = module.eks.cluster_name
+  enable_efs   = false
+
+  depends_on = [
+    module.addons,
+    module.node_groups
+  ]
+}
