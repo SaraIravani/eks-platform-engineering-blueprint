@@ -49,3 +49,10 @@ module "node_groups" {
     module.addons
   ]
 }
+module "scheduling" {
+  source = "../../modules/scheduling"
+
+  namespaces = ["api", "batch", "data", "security", "ingestion"]
+
+  depends_on = [module.node_groups]
+}
