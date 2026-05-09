@@ -63,4 +63,25 @@ node_groups = {
 
     taints = []
   }
+  ingestion = {
+    instance_types = ["c6i.large", "c5.large", "c5a.large"]
+    capacity_type  = "SPOT"
+    min_size       = 1
+    max_size       = 8
+    desired_size   = 2
+    disk_size      = 50
+
+    labels = {
+      workload = "ingestion"
+      lifecycle = "spot"
+    }
+
+    taints = [
+      {
+        key    = "workload"
+        value  = "ingestion"
+        effect = "NO_SCHEDULE"
+      }
+    ]
+  }
 }
