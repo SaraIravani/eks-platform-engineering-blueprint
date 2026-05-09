@@ -91,21 +91,3 @@ module "node_groups" {
 
   depends_on = [module.addons]
 }
-module "scheduling" {
-  source = "../../modules/scheduling"
-
-  namespaces = ["api", "batch", "data", "security", "ingestion"]
-
-  depends_on = [module.node_groups]
-}
-module "storage" {
-  source = "../../modules/storage"
-
-  cluster_name = module.eks.cluster_name
-  enable_efs   = false
-
-  depends_on = [
-    module.addons,
-    module.node_groups
-  ]
-}

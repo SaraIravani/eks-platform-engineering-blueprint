@@ -1,153 +1,43 @@
-name         = "dev-eks"
-cluster_name = "dev-eks-cluster"
-region       = "ca-central-1"
+project         = "eks-platform"
+owner           = "platform-team"
+cluster_name    = "eks-platform-dev"
+region          = "ca-central-1"
+cluster_version = "1.30"
 
-azs = [
-  "ca-central-1a",
-  "ca-central-1b"
-]
+azs             = ["ca-central-1a", "ca-central-1b"]
+vpc_cidr        = "10.20.0.0/16"
+public_subnets  = ["10.20.0.0/24", "10.20.1.0/24"]
+private_subnets = ["10.20.10.0/24", "10.20.11.0/24"]
 
-vpc_cidr = "10.0.0.0/16"
-
-public_subnets = [
-  "10.0.1.0/24",
-  "10.0.2.0/24"
-]
-
-private_subnets = [
-  "10.0.10.0/24",
-  "10.0.11.0/24"
-]
+single_nat_gateway = true
 
 tags = {
-  Environment = "dev"
-  Project     = "eks-platform"
-  Owner       = "platform-team"
+  CostCenter = "1234"
 }
-cluster_version = "1.30"
+
 node_groups = {
   system = {
-    instance_types = ["t3.medium"]
+    instance_types = ["m6i.large"]
     capacity_type  = "ON_DEMAND"
     min_size       = 2
     max_size       = 4
     desired_size   = 2
-    disk_size      = 30
-
-    labels = {
-      workload = "system"
-      lifecycle = "on-demand"
-    }
-
-    taints = [
-      {
-        key    = "workload"
-        value  = "system"
-        effect = "NO_SCHEDULE"
-      }
-    ]
-  }
-  api = {
-    instance_types = ["m6i.large", "m5.large"]
-    capacity_type  = "ON_DEMAND"
-    min_size       = 3
-    max_size       = 10
-    desired_size   = 3
     disk_size      = 50
-
-    labels = {
-      workload = "api"
-      lifecycle = "on-demand"
-      criticality = "high"
-    }
-
-    taints = []
-  }
-  ingestion = {
-    instance_types = ["c6i.large", "c5.large", "c5a.large"]
-    capacity_type  = "SPOT"
-    min_size       = 1
-    max_size       = 8
-    desired_size   = 2
-    disk_size      = 50
-
-    labels = {
-      workload = "ingestion"
-      lifecycle = "spot"
-    }
-
-    taints = [
-      {
-        key    = "workload"
-        value  = "ingestion"
-        effect = "NO_SCHEDULE"
-      }
-    ]
+    labels         = { workload = "system" }
+    taints         = []
   }
   batch = {
-    instance_types = ["c6i.large", "c5.large", "m5.large"]
+    instance_types = ["m6a.large", "m5.large"]
     capacity_type  = "SPOT"
     min_size       = 0
-    max_size       = 20
+    max_size       = 10
     desired_size   = 0
     disk_size      = 40
-
-    labels = {
-      workload = "batch"
-      lifecycle = "spot"
-      scale = "zero"
-    }
-
-    taints = [
-      {
-        key    = "workload"
-        value  = "batch"
-        effect = "NO_SCHEDULE"
-      }
-    ]
-  }
-  data = {
-    instance_types = ["r6i.large", "r5.large"]
-    capacity_type  = "ON_DEMAND"
-    min_size       = 1
-    max_size       = 4
-    desired_size   = 1
-    disk_size      = 100
-
-    labels = {
-      workload = "data"
-      lifecycle = "on-demand"
-      storage = "ebs"
-    }
-
-    taints = [
-      {
-        key    = "workload"
-        value  = "data"
-        effect = "NO_SCHEDULE"
-      }
-    ]
-  }
-  security = {
-    instance_types = ["m6i.large"]
-    capacity_type  = "ON_DEMAND"
-    min_size       = 1
-    max_size       = 3
-    desired_size   = 1
-    disk_size      = 50
-
-    labels = {
-      workload = "security"
-      lifecycle = "on-demand"
-      isolation = "strict"
-    }
-
-    taints = [
-      {
-        key    = "workload"
-        value  = "security"
-        effect = "NO_SCHEDULE"
-      }
-    ]
+    labels         = { workload = "batch" }
+    taints = [{
+      key    = "workload"
+      value  = "batch"
+      effect = "NO_SCHEDULE"
+    }]
   }
 }

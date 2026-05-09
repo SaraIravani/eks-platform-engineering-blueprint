@@ -1,16 +1,4 @@
-variable "cluster_name" {
-  description = "EKS cluster name"
-  type        = string
-}
-
-variable "oidc_provider_arn" {
-  description = "OIDC provider ARN for IRSA"
-  type        = string
-  default     = null
-}
-
-variable "oidc_provider_url" {
-  description = "OIDC provider URL without https://"
-  type        = string
-  default     = null
-}
+variable "cluster_name" { type = string }
+variable "oidc_provider_arn" { type = string default = null }
+variable "oidc_provider_url" { type = string default = null }
+variable "tags" { type = map(string) default = {} }
