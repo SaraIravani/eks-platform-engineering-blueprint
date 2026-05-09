@@ -22,3 +22,7 @@ output "vpc_endpoint_ids" {
   description = "VPC endpoint IDs in the dev environment."
   value       = module.vpc.vpc_endpoint_ids
 }
+output "node_group_names" {
+  description = "EKS managed node group names"
+  value       = module.node_groups.node_group_names
+}
