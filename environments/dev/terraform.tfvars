@@ -84,4 +84,26 @@ node_groups = {
       }
     ]
   }
+  batch = {
+    instance_types = ["c6i.large", "c5.large", "m5.large"]
+    capacity_type  = "SPOT"
+    min_size       = 0
+    max_size       = 20
+    desired_size   = 0
+    disk_size      = 40
+
+    labels = {
+      workload = "batch"
+      lifecycle = "spot"
+      scale = "zero"
+    }
+
+    taints = [
+      {
+        key    = "workload"
+        value  = "batch"
+        effect = "NO_SCHEDULE"
+      }
+    ]
+  }
 }
