@@ -1,256 +1,304 @@
-# 🚀 EKS Platform Architecture (Production-Grade)
+# 🚀 Enterprise AWS EKS Platform Blueprint
 
-## 📌 Overview
+## 1) Platform Intent
 
-This document describes the architecture, design decisions, and trade-offs for a production-grade Kubernetes platform built on AWS EKS.
+This repository describes a **production-grade, enterprise EKS platform** that optimizes for:
 
-The goal is to design a **highly available, secure, scalable, and cost-optimized** platform that supports multiple workload types with clear isolation and operational excellence.
+- high availability across Availability Zones (AZs)
+- strong security boundaries and least privilege
+- workload isolation by criticality and trust level
+- elastic scaling with cost control (Spot + On-Demand)
+- deterministic operations through GitOps and standardized workflows
 
----
-
-## 🎯 System Goals
-
-- 🟢 High Availability (Multi-AZ, fault-tolerant)
-- 💰 Cost Optimization (Spot + On-Demand strategy)
-- 🔒 Strong Security Isolation (workload & IAM boundaries)
-- ⚙️ Scalability (horizontal & cluster-level autoscaling)
-- 📦 Support for heterogeneous workloads (API, batch, data, etc.)
-- 📊 Observability & operational visibility
+The design below is aligned to the Terraform modules in this repo (`vpc`, `eks`, `node_groups`, `security`, `autoscaling`, `addons`, `storage`, `iam`, `scheduling`).
 
 ---
 
-## 📊 Workload Classification & SLA
+## 2) Target VPC and Subnet Architecture
 
-| Workload   | Description                         | Availability | RTO   | RPO   |
-|------------|-------------------------------------|-------------|-------|-------|
-| API        | User-facing services                | 99.9%       | <1m   | 0     |
-| System     | Core cluster components             | 99.99%      | <1m   | 0     |
-| Ingestion  | Data pipelines / CPU-heavy jobs     | Best-effort | N/A   | N/A   |
-| Batch      | Non-critical background jobs        | Best-effort | N/A   | N/A   |
-| Data       | Stateful services (DB, ETL)         | 99.99%      | <5m   | <1m   |
-| Security   | Vault, compliance, security agents  | 99.99%      | <1m   | 0     |
+## VPC architecture
 
----
+- **One VPC per environment** (`dev`, `staging`, `prod`) to reduce blast radius.
+- Recommended VPC CIDR per environment: `/16`.
+- 3-AZ minimum (for example `a/b/c`) for production resilience.
+- DNS hostnames and DNS support enabled.
 
-## 💰 Cost Strategy
+## Subnet strategy
 
-- Use **On-Demand instances** for:
-  - API workloads
-  - System components
-  - Security workloads
+Per AZ, create:
 
-- Use **Spot instances** for:
-  - Batch workloads (100%)
-  - Ingestion workloads (~70%)
+- **Public subnet** (ingress only)
+- **Private app subnet** (EKS managed nodes and internal services)
+- **Private data subnet** (optional: stateful/self-managed data services)
 
-- Use **mixed instance types** to:
-  - Reduce Spot interruption risk
-  - Improve capacity availability
+Suggested segmentation (example only):
 
-💡 Estimated cost reduction: **~60–70% vs fully On-Demand**
+- `10.20.0.0/16` VPC (prod)
+  - Public: `10.20.0.0/20`, `10.20.16.0/20`, `10.20.32.0/20`
+  - Private-app: `10.20.64.0/19`, `10.20.96.0/19`, `10.20.128.0/19`
+  - Private-data: `10.20.160.0/21`, `10.20.168.0/21`, `10.20.176.0/21`
 
----
+## Private/public separation
 
-## 🌎 Region Strategy
-
-- **Primary Region:** `ca-central-1` (Canada Central 🇨🇦)
-
-### ✅ Reasons:
-- Data residency compliance
-- Lower latency for Canadian users
-
-### ⚠️ Trade-offs:
-- Slightly higher cost vs `us-east-1`
-- Lower instance diversity in some cases
+- Internet-facing ALB/NLB live in **public subnets**.
+- EKS worker nodes run in **private subnets only**.
+- Outbound access from private subnets via **NAT Gateway per AZ** (avoid single NAT SPOF).
+- Prefer VPC endpoints (S3, ECR, STS, CloudWatch, KMS, EC2) to reduce NAT dependency and cost.
 
 ---
 
-## 🏗️ High Availability Design
+## 3) EKS Control Plane Access Model
 
-- Multi-AZ deployment (minimum 3 AZs)
-- All node groups span multiple AZs
-- API workloads:
-  - Minimum 3 replicas
-  - Load-balanced via ALB
-
-- Control plane:
-  - Fully managed by EKS
-  - Multi-AZ by default
+- Keep endpoint access **private-first**.
+- If public endpoint is required, restrict with API server allowlist CIDRs + MFA-backed operator access.
+- Use AWS IAM Authenticator model for Kubernetes authN.
+- Use RBAC groups mapped from IAM roles (platform-admin, read-only, CI deployer, break-glass).
+- Enable EKS control-plane logs: `api`, `audit`, `authenticator`, `controllerManager`, `scheduler`.
 
 ---
 
-## 🌐 Network Architecture
+## 4) Node Group Topology and Capacity Strategy
 
-### VPC Design
+## System vs application node pools
 
-- CIDR: `10.0.0.0/16`
+Recommended managed node groups:
 
-### Subnets
+1. **system-ondemand**
+   - Runs CoreDNS, CNI, metrics-server, autoscaling controllers, ingress controllers.
+   - On-Demand only, min 3 (spread across 3 AZs).
+   - Taints: `CriticalAddonsOnly=true:NoSchedule` (or equivalent pattern).
 
-| Type     | CIDR Range       | Purpose              |
-|----------|------------------|----------------------|
-| Public   | 10.0.1.0/24      | ALB / ingress        |
-| Public   | 10.0.2.0/24      | ALB / ingress        |
-| Private  | 10.0.10.0/24     | Worker nodes         |
-| Private  | 10.0.11.0/24     | Worker nodes         |
+2. **app-ondemand**
+   - Critical API and synchronous business services.
+   - On-Demand baseline for predictable performance.
 
-### Key Principles
+3. **app-spot**
+   - Stateless and interruption-tolerant workloads.
+   - Multi-instance-family diversification.
 
-- 🔒 Worker nodes in **private subnets only**
-- 🌍 Internet access via NAT Gateway
-- 🌐 Public subnets only for Load Balancers
+4. **batch-spot**
+   - Jobs/cronjobs/event consumers.
+   - Scale-to-zero permitted.
 
----
+5. **data-ondemand**
+   - Stateful services requiring stable storage/network.
+   - Prefer memory/storage optimized instances.
 
-## 🔐 Security Baseline
+6. **security-ondemand-dedicated**
+   - Vault, policy engines, scanners, runtime security components.
+   - Strict taints/tolerations and namespace policy isolation.
 
-- IAM Roles for Service Accounts (IRSA)
-- Least privilege access model
-- Encryption at rest:
-  - EBS volumes
-  - Kubernetes secrets
-- No SSH access to nodes
-- Security Groups:
-  - Strict inbound rules
-  - Internal communication only where required
+## Spot vs On-Demand strategy
 
-### 🔐 Advanced Practices
-
-- Zero Trust mindset
-- Workload isolation via node groups + taints
-- Dedicated nodes for sensitive workloads
+- **On-Demand:** system, security, tier-0 APIs, stateful critical workloads.
+- **Spot:** batch, async workers, elastic compute.
+- **Mixed strategy:** app tier with fallback to On-Demand when Spot unavailable.
+- Use PodDisruptionBudgets + topology spread + interruption handling.
 
 ---
 
-## 🧱 Node Group Strategy
+## 5) Ingress and East/West Traffic Architecture
 
-| Node Group | Purpose                          | Capacity Type        | Notes |
-|------------|----------------------------------|----------------------|------|
-| System     | CoreDNS, autoscaler              | On-Demand            | Critical workloads |
-| API        | User-facing services             | On-Demand (min=3)    | SLA-sensitive |
-| Ingestion  | Data pipelines                   | Mixed (70% Spot)     | Cost-optimized |
-| Batch      | Background jobs                  | 100% Spot            | Scale-to-zero |
-| Data       | Stateful workloads               | Memory-optimized     | Persistent storage |
-| Security   | Vault, compliance tools          | Dedicated            | Isolated |
+## Ingress architecture
 
----
+- Use AWS Load Balancer Controller.
+- **Public ALB** for internet traffic.
+- **Internal ALB/NLB** for private service exposure.
+- Ingress classes per trust zone (public/internal).
+- Optionally, CloudFront + WAF in front of public ALB for edge protection.
 
-## ⚙️ Scheduling & Isolation
+## Production traffic flow
 
-- Node labels for workload targeting
-- Taints to enforce isolation
-- Tolerations in pod specs
-- Node affinity / anti-affinity rules
-
-### Example:
-
-- Security workloads:
-  - Only run on dedicated nodes
-- Batch workloads:
-  - Prefer Spot nodes
+1. Client -> Route53 -> (optional CloudFront/WAF) -> Public ALB
+2. ALB -> Ingress controller -> Kubernetes Service -> Pod
+3. Pod -> internal services (ClusterIP / service mesh / internal LB)
+4. Pod outbound -> NAT or VPC Endpoint
+5. Telemetry -> Prometheus/CloudWatch/OTel backends
 
 ---
 
-## 💾 Storage Strategy
+## 6) Storage and Data Protection Architecture
 
-- **EBS (gp3, io2)** for:
-  - Stateful workloads
-- **EFS** for:
-  - Shared storage
+## Storage architecture
 
-### Features
+- **EBS CSI** for block volumes (gp3 default, io2 for high IOPS).
+- **EFS CSI** for shared POSIX volumes.
+- StorageClasses by SLA tier (`gp3-standard`, `gp3-critical`, `io2-latency`).
+- Enable encryption with KMS CMKs.
 
-- Dynamic provisioning via CSI drivers
-- Backup strategy:
-  - Velero (planned)
+## Backup/disaster recovery architecture
 
----
-
-## 📈 Scaling Strategy
-
-- Horizontal Pod Autoscaler (HPA)
-- Cluster Autoscaler (or Karpenter)
-
-### Goals:
-
-- Fast scale-up for API workloads
-- Cost-efficient scaling for batch workloads
-- Scale-to-zero for non-critical jobs
+- Velero for Kubernetes object + PV snapshot orchestration.
+- AWS Backup policies for EBS/EFS/RDS (if used externally).
+- Cross-region backup copy for compliance tiers.
+- Define workload tiers with explicit RPO/RTO:
+  - Tier-0: RPO < 15 min, RTO < 60 min
+  - Tier-1: RPO < 1 hr, RTO < 4 hr
+  - Tier-2: best effort
 
 ---
 
-## 📊 Observability
+## 7) Security, IAM, and Isolation Architecture
 
-- Metrics:
-  - Prometheus
-- Visualization:
-  - Grafana
-- Logs:
-  - CloudWatch
+## Security architecture
 
-### Future Enhancements
+- Multi-layer model:
+  - Network: SG segmentation + Kubernetes NetworkPolicies
+  - Identity: IAM + IRSA + RBAC
+  - Runtime: admission policies (OPA/Kyverno), image policies, pod security standards
+  - Data: KMS encryption, secret externalization (e.g., AWS Secrets Manager/Vault)
+- No SSH to nodes; use SSM Session Manager if node access is unavoidable.
+- Image provenance and vulnerability scanning in CI.
 
-- Alerting rules
-- SLO dashboards
+## IAM/IRSA architecture
 
----
+- One IAM role per service account for AWS API access.
+- Narrow resource ARNs and conditions (namespace/service account binding).
+- Separate IRSA roles per environment and per app domain.
+- Dedicated cross-account role pattern for shared services access.
 
-## 🏷️ Naming Convention
+## Security boundaries
 
-Format:
+- Account boundary (preferred): separate AWS accounts per env/workload class.
+- Network boundary: subnet + SG + NACL strategy.
+- Cluster boundary: namespace + RBAC + policy controls.
+- Node boundary: taints/affinity to isolate sensitive workloads.
 
-### Examples:
-- `prod-eks-cluster`
-- `prod-api-ng`
-- `dev-batch-ng`
+## Workload isolation and blast-radius reduction
 
----
-
-## 🧾 Tagging Strategy
-
-| Key         | Example        |
-|-------------|---------------|
-| Environment | prod          |
-| Owner       | platform-team |
-| Project     | eks-platform  |
-| CostCenter  | 1234          |
+- Namespace isolation by team/domain.
+- Dedicated node pools for security/data-critical workloads.
+- Quotas/LimitRanges to prevent noisy-neighbor effects.
+- Progressive delivery (canary/blue-green) to limit release impact.
 
 ---
 
-## ⚖️ Trade-offs & Decisions
+## 8) Observability and Operations Architecture
 
-| Decision | Reason | Trade-off |
-|----------|------|----------|
-| Spot instances | Cost savings | Interruption risk |
-| Multi-AZ | High availability | Higher cost |
-| Dedicated security nodes | Isolation | Resource overhead |
-| ca-central-1 region | Compliance | Higher cost |
+## Observability architecture
 
----
+- Metrics: Prometheus (or AMP) + Grafana.
+- Logs: Fluent Bit -> CloudWatch/OpenSearch.
+- Traces: OpenTelemetry Collector -> X-Ray/Jaeger/Tempo.
+- SLO-based alerting (latency, error rate, saturation, availability).
+- Golden dashboards per platform layer: control plane, node, namespace, service.
 
-## 🚧 Future Improvements
+## Enterprise operational model
 
-- GitOps (ArgoCD / Flux)
-- Karpenter for dynamic scaling
-- Service Mesh (Istio)
-- Advanced security policies (OPA / Kyverno)
-
----
-
-## 🧠 Summary
-
-This architecture is designed to:
-
-- Balance **cost, reliability, and scalability**
-- Support **multiple workload types**
-- Provide **strong isolation and security**
-- Be **production-ready and extensible**
+- Platform team owns cluster lifecycle, guardrails, shared services.
+- App teams own namespace workloads via GitOps.
+- Incident model: on-call rotations, severity matrix, runbooks, postmortems.
+- Change model: PR-driven with policy checks and staged promotion.
 
 ---
 
-## 👩‍💻 Author
+## 9) GitOps and CI/CD Architecture
 
-Designed by: **Sara Iravani**  
-Role: DevOps / Platform Engineer  
-Location: Canada 🇨🇦
+## GitOps architecture
 
+- Argo CD or Flux as pull-based reconciler.
+- Repo separation:
+  - **platform repo** (cluster addons, policies, base infra manifests)
+  - **application repos** (services, Helm/Kustomize overlays)
+  - **environment repo** (promotion state: dev -> staging -> prod)
+- Drift detection and self-healing enabled.
+- Sync waves/hooks for dependency ordering.
+
+## CI/CD architecture
+
+Pipeline stages:
+
+1. Build + unit tests
+2. SAST + dependency + container scan
+3. Image signing + SBOM publish
+4. Push to ECR
+5. Update GitOps manifests (immutable image tag)
+6. Progressive deploy + automated verification
+
+Promotion is pull-request based with approvals and policy gates.
+
+---
+
+## 10) Scaling and Failure Behavior
+
+## Scaling behavior
+
+- HPA scales pods based on CPU/memory/custom metrics.
+- Cluster Autoscaler or Karpenter scales nodes from pending pods.
+- Time-based pre-scaling for known peak windows.
+- PriorityClasses ensure critical workloads scale first.
+
+## Failure handling
+
+- Pod failure: liveness/readiness probes + replica self-healing.
+- Node failure: workloads rescheduled; autoscaler replaces capacity.
+- Control plane issues: AWS-managed EKS HA control plane reduces ops burden.
+
+## AZ failure handling
+
+- Minimum 3 AZ deployment for nodes and load balancing.
+- Topology spread constraints + anti-affinity across AZs.
+- PDBs tuned so quorum services survive single-AZ loss.
+- NAT Gateway per AZ avoids zonal egress dependency.
+
+## Node failure handling
+
+- Managed node group auto-repair/replace behavior.
+- Drain-safe configs: PDB + graceful termination + preStop hooks.
+- Separate failure domains by node pool purpose.
+
+---
+
+## 11) Recommended Production Topology
+
+- 1 EKS cluster per environment for strong separation, or 1 prod cluster per major business domain for very large orgs.
+- 3 AZ region deployment.
+- 6 node groups minimum (system/app/batch/data/security separation).
+- Public + internal ingress classes.
+- Full observability stack with centralized logs/metrics/traces.
+- Velero + AWS Backup with cross-region copy for Tier-0/Tier-1.
+- GitOps-driven continuous reconciliation.
+
+---
+
+## 12) Recommended HA Strategy
+
+- Multi-AZ EKS + Multi-AZ node groups + ALB cross-zone balancing.
+- Replicas >= 3 for critical stateless APIs.
+- Stateful sets distributed with zonal awareness.
+- Backup + restore drills quarterly.
+- Optional multi-region active/passive for regulated or extreme uptime requirements.
+
+---
+
+## 13) Recommended Operational Workflows
+
+1. **Cluster lifecycle**: Terraform plan/apply through controlled pipeline.
+2. **Add-on lifecycle**: GitOps managed; version pinning + phased rollout.
+3. **Incident response**: alerts -> triage -> runbook -> mitigation -> postmortem.
+4. **Patch management**: monthly node AMI/EKS patch windows with canary node groups.
+5. **Access management**: JIT privileged access, audited and time-bounded.
+
+---
+
+## 14) Recommended Scaling Workflows
+
+1. Define SLO and scaling signals per workload.
+2. Set HPA min/max and PDB/priority policy.
+3. Configure autoscaler/Karpenter with constrained instance families.
+4. Run load tests and failure injection before production changes.
+5. Review monthly: cost, interruption rate, saturation, right-sizing opportunities.
+
+---
+
+## 15) How This Maps to the Repository
+
+- `modules/vpc`: multi-AZ network foundations and subnet layout.
+- `modules/eks`: control plane and cluster baseline.
+- `modules/node_groups`: capacity topology and isolation.
+- `modules/security` + `modules/iam`: guardrails, access, IRSA primitives.
+- `modules/storage`: persistent storage strategy.
+- `modules/addons` + `modules/autoscaling` + `modules/scheduling`: platform operations plane.
+- `tests/`: baseline workload and storage validation manifests.
+
+This blueprint is intended to be **enterprise-comparable**: secure-by-default, resilient, scalable, and operationally governed.
