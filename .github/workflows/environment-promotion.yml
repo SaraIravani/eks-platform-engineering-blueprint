@@ -1,0 +1,32 @@
+name: environment-promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_env:
+        description: Source environment
+        required: true
+        type: choice
+        options: [dev, stage]
+      to_env:
+        description: Target environment
+        required: true
+        type: choice
+        options: [stage, prod]
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate promotion path
+        run: |
+          if [ "${{ github.event.inputs.from_env }}" = "dev" ] && [ "${{ github.event.inputs.to_env }}" = "stage" ]; then exit 0; fi
+          if [ "${{ github.event.inputs.from_env }}" = "stage" ] && [ "${{ github.event.inputs.to_env }}" = "prod" ]; then exit 0; fi
+          echo "Invalid promotion path"
+          exit 1
+
+      - name: Promotion record
+        run: echo "Promoting ${{ github.sha }} from ${{ github.event.inputs.from_env }} to ${{ github.event.inputs.to_env }}"

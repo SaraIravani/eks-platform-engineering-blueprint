@@ -1,0 +1,64 @@
+name: terraform-plan-apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options: [dev, stage, prod]
+      action:
+        description: 'Plan or Apply'
+        required: true
+        type: choice
+        options: [plan, apply]
+  push:
+    branches: [main]
+    paths:
+      - '**/*.tf'
+      - 'environments/**'
+      - 'modules/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan_or_apply:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    concurrency:
+      group: terraform-${{ github.event.inputs.environment || 'dev' }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: environments/${{ github.event.inputs.environment || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Configure AWS credentials from OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/github-oidc-terraform
+          aws-region: us-east-1
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform plan
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ github.event.inputs.environment || 'dev' }}-${{ github.sha }}
+          path: environments/${{ github.event.inputs.environment || 'dev' }}/tfplan
+
+      - name: Terraform apply
+        if: ${{ github.event.inputs.action == 'apply' || github.event_name == 'push' }}
+        run: terraform apply -input=false -auto-approve tfplan
