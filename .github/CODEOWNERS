@@ -1,0 +1,18 @@
+# Global fallback
+* @org/platform-team
+
+# Terraform root and provider configuration
+/*.tf @org/platform-team @org/sre-team
+
+# Environment stacks
+/environments/** @org/platform-team @org/sre-team
+
+# Security-sensitive modules
+/modules/security/** @org/platform-team @org/security-team
+/modules/iam/** @org/platform-team @org/security-team
+
+# Core platform modules
+/modules/** @org/platform-team
+
+# CI/CD and governance
+/.github/** @org/platform-team @org/security-team

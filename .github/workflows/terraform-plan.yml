@@ -1,0 +1,49 @@
+name: Terraform Plan
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [dev, stage, prod]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Terraform init
+        working-directory: environments/${{ matrix.environment }}
+        run: terraform init
+
+      - name: Terraform plan
+        working-directory: environments/${{ matrix.environment }}
+        run: terraform plan -out=${{ matrix.environment }}.tfplan
+
+      - name: Export plan json
+        working-directory: environments/${{ matrix.environment }}
+        run: terraform show -json ${{ matrix.environment }}.tfplan > ${{ matrix.environment }}.plan.json
+
+      - name: Upload plan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan-${{ matrix.environment }}-${{ github.sha }}
+          path: |
+            environments/${{ matrix.environment }}/${{ matrix.environment }}.tfplan
+            environments/${{ matrix.environment }}/${{ matrix.environment }}.plan.json
+          retention-days: 180

@@ -1,0 +1,22 @@
+name: GitOps Sync Trigger
+
+on:
+  workflow_run:
+    workflows: ["Terraform Apply"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger downstream GitOps reconciliation webhook
+        env:
+          GITOPS_WEBHOOK_URL: ${{ secrets.GITOPS_WEBHOOK_URL }}
+        run: |
+          curl -sS -X POST "$GITOPS_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d '{"source":"terraform-apply","sha":"${{ github.event.workflow_run.head_sha }}"}'

@@ -1,0 +1,34 @@
+name: Release Modules
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt check
+        run: terraform fmt -check -recursive
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          echo "## Terraform Modules Release" > RELEASE_NOTES.md
+          echo "Tag: ${GITHUB_REF_NAME}" >> RELEASE_NOTES.md
+          echo "\nIncluded modules:" >> RELEASE_NOTES.md
+          find modules -maxdepth 1 -mindepth 1 -type d -printf "- %f\n" >> RELEASE_NOTES.md
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
