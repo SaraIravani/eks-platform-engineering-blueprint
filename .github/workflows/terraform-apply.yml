@@ -1,0 +1,45 @@
+name: Terraform Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Terraform init
+        working-directory: environments/${{ inputs.environment }}
+        run: terraform init
+
+      - name: Terraform plan (apply gate)
+        working-directory: environments/${{ inputs.environment }}
+        run: terraform plan -out=apply.tfplan
+
+      - name: Terraform apply
+        working-directory: environments/${{ inputs.environment }}
+        run: terraform apply -auto-approve apply.tfplan

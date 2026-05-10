@@ -1,0 +1,64 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env_dir: ["environments/dev"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (no backend)
+        working-directory: ${{ matrix.env_dir }}
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        working-directory: ${{ matrix.env_dir }}
+        run: terraform validate
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+
+      - name: TFLint
+        run: tflint --recursive
+
+      - name: tfsec scan
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          soft_fail: false
+
+      - name: Checkov scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform
+          soft_fail: false
+
+      - name: Terraform plan (PR preview)
+        working-directory: ${{ matrix.env_dir }}
+        run: terraform plan -no-color -out=pr.tfplan
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-plan-${{ matrix.env_dir }}
+          path: ${{ matrix.env_dir }}/pr.tfplan
+          retention-days: 14
