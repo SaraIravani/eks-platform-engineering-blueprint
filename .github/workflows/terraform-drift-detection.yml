@@ -1,0 +1,55 @@
+name: terraform-drift-detection
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [dev, stage, prod]
+    defaults:
+      run:
+        working-directory: environments/${{ matrix.env }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Configure AWS credentials from OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/github-oidc-terraform
+          aws-region: us-east-1
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform drift check
+        id: drift
+        run: |
+          set +e
+          terraform plan -detailed-exitcode -lock=false -input=false
+          code=$?
+          echo "exit_code=$code" >> $GITHUB_OUTPUT
+          if [ $code -eq 1 ]; then
+            exit 1
+          fi
+
+      - name: Create drift issue
+        if: ${{ steps.drift.outputs.exit_code == '2' }}
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: "[Drift] Terraform drift detected in ${{ matrix.env }}"
+          content-filepath: .github/drift-issue-template.md
+          labels: drift,terraform,operations

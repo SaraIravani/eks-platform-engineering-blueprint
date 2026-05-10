@@ -1,0 +1,15 @@
+# Global default ownership
+* @org/platform-team
+
+# Terraform core and environments
+*.tf @org/platform-team @org/sre-team
+environments/** @org/platform-team @org/sre-team
+modules/** @org/platform-team
+
+# Security and policy ownership
+.github/workflows/** @org/platform-team @org/security-team
+modules/security/** @org/security-team @org/platform-team
+
+# Documentation
+README.md @org/platform-team
+docs/** @org/platform-team
